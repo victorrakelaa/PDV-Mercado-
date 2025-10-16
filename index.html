@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDV e Gestão de Estoque</title>
+    <!-- Carregamento do Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Configuração de Fonte Inter (Recomendado) */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7;
+        }
+        /* Estilos personalizados para o app PDV/Estoque */
+        .tab-button {
+            transition: all 0.3s;
+            @apply px-6 py-3 text-lg font-semibold rounded-t-xl hover:bg-indigo-100;
+        }
+        .tab-button.active {
+            @apply bg-white text-indigo-700 border-b-4 border-indigo-500 shadow-t-lg;
+        }
+        .tab-content {
+            display: none;
+            @apply bg-white p-6 rounded-b-xl shadow-lg;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+    <!-- Configuração do Tailwind (para usar classes customizadas) -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#4f46e5', /* Indigo-600 */
+                        'secondary': '#10b981', /* Emerald-500 */
+                    }
+                }
+            }
+        }
+    </script>
+
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-6 pb-4 border-b border-gray-200">
+            <h1 class="text-3xl font-extrabold text-gray-900 mb-1">Sistema de Caixa & Estoque</h1>
+            <p id="auth-status" class="text-sm text-gray-600">
+                Aguardando autenticação...
+            </p>
+            <p id="user-display" class="text-xs text-gray-500 mt-1">
+                <span class="font-medium text-gray-700">ID do Usuário:</span> N/A
+            </p>
+        </header>
+
+        <!-- Navegação por Abas (Tabs) -->
+        <div class="flex border-b border-gray-300">
+            <button class="tab-button active" onclick="showTab('pdv')">Ponto de Venda (PDV)</button>
+            <button class="tab-button" onclick="showTab('estoque')">Gerenciar Estoque</button>
+        </div>
+
+        <!-- Conteúdo PDV (Caixa) -->
+        <div id="pdv-content" class="tab-content active transition-all duration-300">
+            <h2 class="text-2xl font-bold mb-4 text-indigo-700">Caixa Rápido</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Coluna de Leitura de Barcode / Entrada -->
+                <div class="md:col-span-1 p-4 bg-gray-50 rounded-xl shadow-inner">
+                    <label for="barcode-input" class="block text-sm font-medium text-gray-700 mb-2">
+                        Escanear Produto (Código de Barras)
+                    </label>
+                    <input type="text" id="barcode-input" placeholder="Digite ou escaneie o código..."
+                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary text-xl font-mono"
+                           onkeypress="if(event.key === 'Enter') handlePdvScan(this.value)">
+                    <p id="pdv-message" class="mt-2 text-sm text-red-500 h-5"></p>
+                </div>
+
+                <!-- Coluna de Carrinho -->
+                <div class="md:col-span-2">
+                    <div class="border rounded-xl shadow-md p-4 min-h-[300px] flex flex-col">
+                        <h3 class="text-xl font-semibold mb-3 border-b pb-2">Itens no Carrinho</h3>
+                        
+                        <!-- Tabela do Carrinho -->
+                        <div class="overflow-x-auto flex-grow mb-4">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
+                                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Preço</th>
+                                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qtd</th>
+                                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Subtotal</th>
+                                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ação</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cart-list" class="bg-white divide-y divide-gray-200">
+                                    <!-- Itens do carrinho serão renderizados aqui -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Rodapé do Carrinho / Total -->
+                        <div class="flex justify-between items-center pt-4 border-t-2 border-indigo-200">
+                            <button onclick="clearCart()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg shadow transition-colors">
+                                Limpar Carrinho
+                            </button>
+                            <div class="text-right">
+                                <span class="text-xl font-semibold text-gray-800">TOTAL:</span>
+                                <span id="cart-total" class="text-4xl font-extrabold text-primary ml-2">R$ 0,00</span>
+                            </div>
+                        </div>
+                        
+                        <button id="finalize-sale-button" onclick="finalizeSale()" 
+                                class="mt-4 w-full bg-secondary hover:bg-emerald-600 text-white font-bold py-4 text-xl rounded-lg shadow-xl transition-colors disabled:opacity-50"
+                                disabled>
+                            Finalizar Venda
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Conteúdo Estoque (Gerenciamento) -->
+        <div id="estoque-content" class="tab-content transition-all duration-300">
+            <h2 class="text-2xl font-bold mb-4 text-indigo-700">Gerenciamento de Produtos</h2>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Formulário de Cadastro/Edição -->
+                <div class="lg:col-span-1 p-6 bg-white rounded-xl shadow-md border">
+                    <h3 class="text-xl font-semibold mb-4 text-gray-800" id="form-title">Cadastrar Novo Produto</h3>
+                    <form id="product-form" onsubmit="event.preventDefault(); saveProduct()">
+
+                        <input type="hidden" id="product-doc-id">
+                        
+                        <!-- Campo de Barcode -->
+                        <div class="mb-4">
+                            <label for="product-barcode-search" class="block text-sm font-medium text-gray-700">Buscar por Código de Barras (Escaneie)</label>
+                            <input type="text" id="product-barcode-search" placeholder="Buscar / Novo Código"
+                                   class="mt-1 block w-full p-3 border border-gray-300 rounded-lg font-mono"
+                                   onkeypress="if(event.key === 'Enter') { event.preventDefault(); lookupProduct(this.value); }"
+                                   required>
+                            <p class="text-xs text-gray-500 mt-1">Pressione Enter para buscar o produto no estoque.</p>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="product-name" class="block text-sm font-medium text-gray-700">Nome do Produto</label>
+                            <input type="text" id="product-name" placeholder="Ex: Arroz Integral 5kg"
+                                   class="mt-1 block w-full p-3 border border-gray-300 rounded-lg" required>
+                        </div>
+                        
+                        <!-- NOVO CAMPO: Descrição e Geração Gemini -->
+                        <div class="mb-4">
+                            <label for="product-description" class="block text-sm font-medium text-gray-700">Descrição/Detalhes Adicionais</label>
+                            <div class="flex space-x-2 mt-1">
+                                <textarea id="product-description" placeholder="Ex: Grão longo, tipo 1. Ideal para culinária oriental."
+                                       class="block w-full p-3 border border-gray-300 rounded-lg resize-y h-20"></textarea>
+                                <button type="button" onclick="generateProductDescription()" class="bg-indigo-400 hover:bg-indigo-500 text-white font-bold py-2 px-3 rounded-lg shadow-md flex items-center justify-center whitespace-nowrap transition-colors">
+                                    Sugestão ✨
+                                </button>
+                            </div>
+                            <p id="description-loading" class="mt-1 text-xs text-indigo-500 h-4"></p>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="product-price" class="block text-sm font-medium text-gray-700">Preço (R$)</label>
+                            <input type="number" step="0.01" id="product-price" placeholder="Ex: 15.99"
+                                   class="mt-1 block w-full p-3 border border-gray-300 rounded-lg" required>
+                        </div>
+
+                        <!-- Controle de Estoque -->
+                        <div class="mb-6">
+                            <label for="product-stock" class="block text-sm font-medium text-gray-700">Estoque Atual</label>
+                            <div class="flex items-center space-x-2 mt-1">
+                                <input type="number" id="product-stock" readonly value="0"
+                                       class="flex-grow p-3 border border-gray-300 rounded-lg bg-gray-100 text-lg font-bold text-center">
+                                <button type="button" onclick="adjustStock(-1)" class="bg-red-400 hover:bg-red-500 text-white font-bold py-2 px-3 rounded-lg transition-colors">-1</button>
+                                <button type="button" onclick="adjustStock(1)" class="bg-secondary hover:bg-emerald-600 text-white font-bold py-2 px-3 rounded-lg transition-colors">+1</button>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="w-full bg-primary hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition-colors">
+                            Salvar Produto (Cadastrar/Atualizar)
+                        </button>
+                        <button type="button" onclick="clearProductForm()" class="mt-2 w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 rounded-lg transition-colors">
+                            Limpar Formulário
+                        </button>
+                        <p id="estoque-message" class="mt-4 text-sm text-center text-green-600 h-5"></p>
+                    </form>
+                </div>
+
+                <!-- Lista de Produtos (Estoque) -->
+                <div class="lg:col-span-2 p-6 bg-white rounded-xl shadow-md border">
+                    <h3 class="text-xl font-semibold mb-4 text-gray-800">Estoque em Tempo Real</h3>
+                    <div id="product-list" class="space-y-3 max-h-[600px] overflow-y-auto">
+                        <p class="text-gray-500 text-center py-4">Carregando produtos...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Mensagem de Resumo Pós-Venda (Gemini) -->
+    <div id="message-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-50 flex items-center justify-center p-4" onclick="this.classList.add('hidden')">
+        <div class="bg-white rounded-xl p-6 md:p-8 max-w-lg w-full shadow-2xl" onclick="event.stopPropagation()">
+            <h3 class="text-2xl font-bold text-primary mb-3 flex items-center">
+                Resumo da Venda ✨
+            </h3>
+            <p id="modal-message-content" class="text-gray-700 whitespace-pre-wrap"></p>
+            <button onclick="document.getElementById('message-modal').classList.add('hidden')" class="mt-6 w-full bg-secondary hover:bg-emerald-600 text-white font-bold py-3 rounded-lg">
+                Fechar
+            </button>
+        </div>
+    </div>
+
+
+    <!-- Bibliotecas Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, query, where, getDocs, doc, setDoc, runTransaction, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Variaveis globais do Canvas
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'pdv-default-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db;
+        let auth;
+        let userId = 'default_user'; // Será atualizado após autenticação
+        let productsRef;
+        let salesHistoryRef;
+        let inventoryData = {}; // Cache dos produtos por barcode
+        let cart = {}; // { barcode: { ...product, quantity: N } }
+
+        // --- CONFIGURAÇÃO DA API GEMINI ---
+        const GEMINI_API_KEY = ""; // A chave API será fornecida pelo ambiente de execução
+        const GEMINI_MODEL = 'gemini-2.5-flash-preview-05-20';
+        const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+        
+        // Função utilitária para chamar a API Gemini com backoff (necessário)
+        async function callGeminiApi(prompt, systemInstruction, retries = 3, delay = 1000) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const payload = {
+                        contents: [{ parts: [{ text: prompt }] }],
+                        systemInstruction: { parts: [{ text: systemInstruction }] },
+                    };
+
+                    const response = await fetch(GEMINI_API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        // Se for erro 429 (Too Many Requests) ou outro erro de servidor, tenta novamente
+                        if (response.status === 429 && i < retries - 1) {
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            delay *= 2; // Exponential backoff
+                            continue;
+                        }
+                        throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`);
+                    }
+
+                    const result = await response.json();
+                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                    if (!text) {
+                        throw new Error("Resposta da API Gemini vazia ou inválida.");
+                    }
+
+                    return text;
+
+                } catch (error) {
+                    if (i === retries - 1) {
+                        console.error("Erro final ao chamar a API Gemini:", error);
+                        throw error;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2; 
+                }
+            }
+        }
+
+
+        // Inicializa o Firebase e a Autenticação
+        async function setupFirebase() {
+            setLogLevel('Debug');
+            if (Object.keys(firebaseConfig).length === 0) {
+                console.error("Firebase Config não está definida. A aplicação não funcionará corretamente.");
+                document.getElementById('auth-status').textContent = 'ERRO: Configuração do Firebase ausente.';
+                return;
+            }
+
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                userId = auth.currentUser.uid;
+                
+                // Define as referências de coleção baseadas no userId
+                productsRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
+                salesHistoryRef = collection(db, `artifacts/${appId}/users/${userId}/sales_history`);
+
+                document.getElementById('auth-status').textContent = 'Autenticado com sucesso!';
+                document.getElementById('user-display').innerHTML = `<span class="font-medium text-gray-700">ID do Usuário:</span> ${userId}`;
+
+                // Inicia o listener de estoque em tempo real
+                listenToProducts();
+            } catch (error) {
+                console.error("Erro ao configurar o Firebase ou autenticar:", error);
+                document.getElementById('auth-status').textContent = `Erro de Autenticação: ${error.message}`;
+                userId = crypto.randomUUID(); // Fallback para um ID aleatório
+                document.getElementById('user-display').innerHTML = `<span class="font-medium text-gray-700">ID do Usuário:</span> ${userId} (Anonimo/Local)`;
+                // Usar a mesma lógica de coleção, mas com ID anônimo
+                productsRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
+                salesHistoryRef = collection(db, `artifacts/${appId}/users/${userId}/sales_history`);
+                listenToProducts();
+            }
+        }
+
+        // --- FUNÇÕES GERAIS DE UI ---
+
+        window.showTab = function(tabId) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            document.querySelector(`.tab-button[onclick*='${tabId}']`).classList.add('active');
+            document.getElementById(`${tabId}-content`).classList.add('active');
+            
+            // Foca o input de barcode no PDV ao mudar para a aba
+            if (tabId === 'pdv') {
+                document.getElementById('barcode-input').focus();
+            }
+        };
+
+        // Função para formatação monetária
+        function formatCurrency(amount) {
+            // Garante que o valor é tratado como número
+            const numberAmount = parseFloat(amount) || 0; 
+            return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(numberAmount);
+        }
+
+        // --- GERENCIAMENTO DE ESTOQUE (INVENTORY MANAGEMENT) ---
+
+        // Listener em tempo real para o estoque
+        function listenToProducts() {
+            if (!productsRef) return;
+
+            onSnapshot(productsRef, (snapshot) => {
+                inventoryData = {};
+                const productListDiv = document.getElementById('product-list');
+                productListDiv.innerHTML = '';
+                
+                if (snapshot.empty) {
+                    productListDiv.innerHTML = '<p class="text-gray-500 text-center py-4">Nenhum produto encontrado. Comece cadastrando um novo item.</p>';
+                    return;
+                }
+
+                snapshot.docs.forEach(d => {
+                    const data = d.data();
+                    // Adicionando 'description' ao objeto de produto
+                    const product = { ...data, id: d.id, price: parseFloat(data.price), description: data.description || '' };
+                    inventoryData[product.barcode] = product;
+
+                    // Renderiza o item na lista de estoque
+                    productListDiv.innerHTML += `
+                        <div class="flex items-center justify-between p-3 border rounded-lg bg-gray-50 hover:bg-indigo-50 transition-colors">
+                            <div>
+                                <p class="font-semibold text-gray-800">${product.name}</p>
+                                <p class="text-sm text-gray-500 font-mono">Cód: ${product.barcode}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-lg font-bold ${product.stock > 0 ? 'text-secondary' : 'text-red-500'}">${product.stock}</p>
+                                <p class="text-sm text-gray-600">${formatCurrency(product.price)}</p>
+                            </div>
+                            <button onclick="editProduct('${product.id}')" class="text-indigo-500 hover:text-indigo-700 ml-4 p-2 rounded-full hover:bg-indigo-100">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zm-3.83 3.828L7.388 9.214l-4 4A1 1 0 003 14.142V17h2.858a1 1 0 00.707-.293l4-4 2.122-2.122-2.828-2.828z" />
+                                </svg>
+                            </button>
+                        </div>
+                    `;
+                });
+            }, (error) => {
+                console.error("Erro ao ouvir produtos:", error);
+                document.getElementById('product-list').innerHTML = '<p class="text-red-500 text-center py-4">Erro ao carregar o estoque. Verifique o console.</p>';
+            });
+        }
+
+        // Busca um produto pelo barcode para preencher o formulário
+        window.lookupProduct = function(barcode) {
+            const product = inventoryData[barcode];
+            const msg = document.getElementById('estoque-message');
+            
+            if (product) {
+                // Produto encontrado: preenche para edição
+                document.getElementById('form-title').textContent = 'Editar Produto Existente';
+                document.getElementById('product-doc-id').value = product.id;
+                document.getElementById('product-barcode-search').value = product.barcode;
+                document.getElementById('product-name').value = product.name;
+                document.getElementById('product-description').value = product.description || ''; // POPULA DESCRIÇÃO
+                document.getElementById('product-price').value = product.price.toFixed(2);
+                document.getElementById('product-stock').value = product.stock;
+                msg.textContent = `Produto "${product.name}" carregado para edição.`;
+                msg.classList.remove('text-red-500');
+                msg.classList.add('text-green-600');
+            } else {
+                // Produto não encontrado: prepara para novo cadastro
+                clearProductForm(false); // Mantém o barcode para cadastro
+                document.getElementById('product-barcode-search').value = barcode;
+                document.getElementById('form-title').textContent = 'Cadastrar Novo Produto';
+                msg.textContent = `Código não encontrado. Pronto para cadastrar novo produto.`;
+                msg.classList.remove('text-green-600');
+                msg.classList.add('text-red-500');
+            }
+        };
+
+        // Preenche o formulário para edição ao clicar no botão da lista
+        window.editProduct = function(docId) {
+            const product = Object.values(inventoryData).find(p => p.id === docId);
+            if (product) {
+                showTab('estoque');
+                document.getElementById('form-title').textContent = 'Editar Produto Existente';
+                document.getElementById('product-doc-id').value = product.id;
+                document.getElementById('product-barcode-search').value = product.barcode;
+                document.getElementById('product-name').value = product.name;
+                document.getElementById('product-description').value = product.description || ''; // POPULA DESCRIÇÃO
+                document.getElementById('product-price').value = product.price.toFixed(2);
+                document.getElementById('product-stock').value = product.stock;
+            }
+        }
+
+        // Limpa o formulário de produto
+        window.clearProductForm = function(clearBarcode = true) {
+            document.getElementById('form-title').textContent = 'Cadastrar Novo Produto';
+            document.getElementById('product-doc-id').value = '';
+            if (clearBarcode) {
+                document.getElementById('product-barcode-search').value = '';
+            }
+            document.getElementById('product-name').value = '';
+            document.getElementById('product-description').value = ''; // LIMPA DESCRIÇÃO
+            document.getElementById('product-price').value = '';
+            document.getElementById('product-stock').value = 0;
+            document.getElementById('estoque-message').textContent = '';
+            document.getElementById('description-loading').textContent = '';
+        }
+
+        // Ajusta o campo de estoque (apenas UI)
+        window.adjustStock = function(change) {
+            const stockInput = document.getElementById('product-stock');
+            let currentStock = parseInt(stockInput.value) || 0;
+            currentStock = Math.max(0, currentStock + change);
+            stockInput.value = currentStock;
+        }
+
+        // --- FUNÇÃO GEMINI: Geração de Descrição ---
+        window.generateProductDescription = async function() {
+            const productName = document.getElementById('product-name').value.trim();
+            const loadingEl = document.getElementById('description-loading');
+            const descriptionEl = document.getElementById('product-description');
+
+            if (!productName) {
+                loadingEl.textContent = 'Digite o nome do produto primeiro.';
+                loadingEl.classList.remove('text-indigo-500', 'text-green-600');
+                loadingEl.classList.add('text-red-500');
+                return;
+            }
+
+            loadingEl.textContent = 'Gerando sugestão de descrição... (Aguarde)';
+            loadingEl.classList.remove('text-red-500', 'text-green-600');
+            loadingEl.classList.add('text-indigo-500');
+            descriptionEl.value = 'Gerando...';
+
+            const systemPrompt = "Você é um assistente de e-commerce e varejo. Sua tarefa é criar uma descrição de produto concisa e persuasiva em português, com foco em benefícios e detalhes técnicos. Responda apenas com a descrição, sem introduções.";
+            const userPrompt = `Gere uma descrição atraente e informativa para o produto: "${productName}"`;
+
+            try {
+                const description = await callGeminiApi(userPrompt, systemPrompt);
+                descriptionEl.value = description.trim();
+                loadingEl.textContent = 'Sugestão gerada com sucesso.';
+                loadingEl.classList.remove('text-indigo-500', 'text-red-500');
+                loadingEl.classList.add('text-green-600');
+            } catch (error) {
+                descriptionEl.value = '';
+                loadingEl.textContent = 'Erro ao gerar descrição. Verifique o console.';
+                loadingEl.classList.remove('text-indigo-500', 'text-green-600');
+                loadingEl.classList.add('text-red-500');
+                console.error("Erro na geração de descrição:", error);
+            }
+        };
+
+
+        // Salva ou atualiza o produto no Firestore
+        window.saveProduct = async function() {
+            const docId = document.getElementById('product-doc-id').value;
+            const barcode = document.getElementById('product-barcode-search').value.trim();
+            const name = document.getElementById('product-name').value.trim();
+            const description = document.getElementById('product-description').value.trim(); // INCLUINDO DESCRIÇÃO
+            const price = parseFloat(document.getElementById('product-price').value);
+            const stock = parseInt(document.getElementById('product-stock').value);
+            const msg = document.getElementById('estoque-message');
+
+            if (!barcode || !name || isNaN(price) || price <= 0 || isNaN(stock) || stock < 0) {
+                msg.textContent = 'Por favor, preencha todos os campos corretamente.';
+                msg.classList.add('text-red-500');
+                return;
+            }
+
+            const productData = {
+                barcode: barcode,
+                name: name,
+                description: description, // SALVANDO DESCRIÇÃO
+                price: price.toFixed(2), // Armazena como string com 2 casas para precisão
+                stock: stock
+            };
+            
+            try {
+                if (docId) {
+                    // Atualização (Edição)
+                    await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'products', docId), productData);
+                    msg.textContent = `Produto "${name}" atualizado com sucesso!`;
+                } else {
+                    // Cadastro (Novo Produto)
+                    // Verifica se o barcode já existe antes de cadastrar
+                    const existingProduct = Object.values(inventoryData).find(p => p.barcode === barcode);
+                    if (existingProduct) {
+                         msg.textContent = `ERRO: Já existe um produto com o código ${barcode} (${existingProduct.name}). Use a função de busca para editá-lo.`;
+                         msg.classList.add('text-red-500');
+                         return;
+                    }
+                    
+                    const newDocRef = doc(productsRef);
+                    await setDoc(newDocRef, productData);
+                    msg.textContent = `Produto "${name}" cadastrado com sucesso!`;
+                }
+                
+                msg.classList.remove('text-red-500');
+                msg.classList.add('text-green-600');
+                // Limpa o formulário após a operação
+                clearProductForm();
+
+            } catch (error) {
+                console.error("Erro ao salvar o produto:", error);
+                msg.textContent = 'Erro ao salvar: ' + error.message;
+                msg.classList.add('text-red-500');
+            }
+        }
+        
+        // --- PONTO DE VENDA (PDV) ---
+
+        // Adiciona ou incrementa o item no carrinho após o scan
+        window.handlePdvScan = async function(barcode) {
+            const input = document.getElementById('barcode-input');
+            const msg = document.getElementById('pdv-message');
+            input.value = ''; // Limpa o input imediatamente
+            barcode = barcode.trim();
+            msg.textContent = ''; // Limpa mensagens anteriores
+
+            if (!barcode) return;
+
+            const product = inventoryData[barcode];
+
+            if (!product) {
+                msg.textContent = `ERRO: Produto com código ${barcode} não encontrado no estoque.`;
+                input.focus();
+                return;
+            }
+
+            if (product.stock <= 0) {
+                 msg.textContent = `AVISO: Produto "${product.name}" está fora de estoque.`;
+                 input.focus();
+                 return;
+            }
+
+            if (cart[barcode]) {
+                // Incrementa a quantidade, verifica limite de estoque
+                if (cart[barcode].quantity + 1 > product.stock) {
+                    msg.textContent = `AVISO: Não há estoque suficiente de "${product.name}" para adicionar mais um.`;
+                } else {
+                    cart[barcode].quantity += 1;
+                    msg.textContent = `Adicionado mais 1x "${product.name}". Total: ${cart[barcode].quantity}`;
+                }
+            } else {
+                // Adiciona novo item
+                cart[barcode] = {
+                    ...product,
+                    quantity: 1,
+                    // Garante que o preço seja um número para cálculos
+                    price: parseFloat(product.price) 
+                };
+                msg.textContent = `Adicionado "${product.name}" ao carrinho.`;
+            }
+            
+            renderCart();
+            input.focus();
+        }
+
+        // Remove um item do carrinho
+        window.removeFromCart = function(barcode) {
+            delete cart[barcode];
+            renderCart();
+            document.getElementById('pdv-message').textContent = 'Item removido do carrinho.';
+        }
+
+        // Limpa todo o carrinho
+        window.clearCart = function() {
+            cart = {};
+            renderCart();
+            document.getElementById('pdv-message').textContent = 'Carrinho limpo.';
+        }
+
+        // Renderiza o carrinho e o total
+        function renderCart() {
+            const cartList = document.getElementById('cart-list');
+            const cartTotalDisplay = document.getElementById('cart-total');
+            const finalizeButton = document.getElementById('finalize-sale-button');
+            let total = 0;
+            cartList.innerHTML = '';
+            const items = Object.values(cart);
+
+            if (items.length === 0) {
+                cartList.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="text-center py-6 text-gray-500">Nenhum item no carrinho. Escaneie um produto para começar.</td>
+                    </tr>
+                `;
+                finalizeButton.disabled = true;
+            } else {
+                finalizeButton.disabled = false;
+                items.forEach(item => {
+                    const subtotal = item.price * item.quantity;
+                    total += subtotal;
+
+                    cartList.innerHTML += `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">${item.name}</td>
+                            <td class="px-3 py-2 whitespace-nowrap text-sm text-right text-gray-500">${formatCurrency(item.price)}</td>
+                            <td class="px-3 py-2 whitespace-nowrap text-sm font-bold text-right text-gray-700">${item.quantity}</td>
+                            <td class="px-3 py-2 whitespace-nowrap text-sm font-extrabold text-right text-indigo-600">${formatCurrency(subtotal)}</td>
+                            <td class="px-3 py-2 whitespace-nowrap text-right">
+                                <button onclick="removeFromCart('${item.barcode}')" class="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+
+            cartTotalDisplay.textContent = formatCurrency(total);
+        }
+        
+        // --- FUNÇÃO GEMINI: Geração de Resumo Pós-Venda ---
+        async function showPostSaleSummary(itemsSold, totalSaleAmount) {
+            const modal = document.getElementById('message-modal');
+            const content = document.getElementById('modal-message-content');
+            
+            // Lista dos 3 primeiros itens vendidos para o prompt
+            const itemList = itemsSold.slice(0, 3).map(i => `${i.name} (${i.quantity}x)`).join(', ');
+            const moreItems = itemsSold.length > 3 ? ` e mais ${itemsSold.length - 3} itens.` : '.';
+            
+            const userPrompt = `Com base na seguinte venda, crie uma mensagem de agradecimento ou um resumo simpático para o cliente, destacando o total e os principais produtos. Use um tom amigável e de varejo.\n\nProdutos principais: ${itemList}${moreItems}\nTotal da Venda: ${formatCurrency(totalSaleAmount)}`;
+            const systemPrompt = "Você é um atendente de caixa simpático. Sua resposta deve ser uma única mensagem curta, formatada em texto simples (sem markdown), ideal para ser exibida em um recibo ou mensagem pós-venda. Responda apenas com a mensagem.";
+
+            content.innerHTML = '<p class="text-indigo-600 font-medium">Gerando mensagem de agradecimento... ✨</p>';
+            modal.classList.remove('hidden'); // Mostra a modal enquanto gera
+
+            try {
+                const summary = await callGeminiApi(userPrompt, systemPrompt);
+                
+                // Exibe o conteúdo gerado
+                content.innerHTML = `
+                    <p class="text-lg font-bold text-gray-800 mb-2">Venda de ${formatCurrency(totalSaleAmount)} processada!</p>
+                    <div class="bg-gray-100 p-3 rounded-lg border border-indigo-200">
+                        <p class="text-sm text-gray-700 whitespace-pre-wrap">${summary.trim()}</p>
+                    </div>
+                `;
+            } catch (error) {
+                content.innerHTML = `
+                    <p class="text-lg font-bold text-red-600 mb-2">Erro</p>
+                    <p class="text-sm text-gray-700">A venda foi registrada no histórico, mas não foi possível gerar o resumo pós-venda. Verifique o console.</p>
+                `;
+                console.error("Erro na geração do resumo pós-venda:", error);
+            }
+        }
+
+
+        // Finaliza a venda: Atualiza estoque e registra a transação
+        window.finalizeSale = async function() {
+            if (Object.keys(cart).length === 0) {
+                document.getElementById('pdv-message').textContent = 'O carrinho está vazio.';
+                return;
+            }
+
+            document.getElementById('finalize-sale-button').disabled = true;
+            document.getElementById('pdv-message').textContent = 'Processando venda...';
+
+            const itemsSold = Object.values(cart);
+            let totalSaleAmount = 0;
+            itemsSold.forEach(item => {
+                totalSaleAmount += item.price * item.quantity;
+            });
+
+            const batch = writeBatch(db);
+            let transactionSuccessful = true;
+            
+            try {
+                // 1. Atualizar o estoque (Decremento)
+                for (const item of itemsSold) {
+                    const productInInventory = inventoryData[item.barcode];
+                    
+                    if (!productInInventory) {
+                        console.error(`Produto ${item.barcode} não encontrado durante a finalização.`);
+                        transactionSuccessful = false;
+                        break;
+                    }
+                    
+                    const newStock = productInInventory.stock - item.quantity;
+                    
+                    if (newStock < 0) {
+                        document.getElementById('pdv-message').textContent = `ERRO: Venda cancelada. Estoque insuficiente para ${item.name}.`;
+                        transactionSuccessful = false;
+                        break;
+                    }
+
+                    const productDocRef = doc(productsRef, item.id);
+                    batch.set(productDocRef, {
+                        barcode: item.barcode,
+                        name: item.name,
+                        description: productInInventory.description, // Mantém a descrição no update
+                        price: item.price.toFixed(2),
+                        stock: newStock
+                    }); 
+
+                }
+
+                if (!transactionSuccessful) {
+                    document.getElementById('finalize-sale-button').disabled = false;
+                    return;
+                }
+
+                // 2. Registrar a Venda
+                const saleRecord = {
+                    timestamp: new Date().toISOString(),
+                    userId: userId,
+                    total: totalSaleAmount,
+                    items: JSON.stringify(itemsSold.map(i => ({
+                        barcode: i.barcode,
+                        name: i.name,
+                        price: i.price.toFixed(2),
+                        quantity: i.quantity
+                    }))) // Serializa itens
+                };
+                
+                const newSaleRef = doc(salesHistoryRef);
+                batch.set(newSaleRef, saleRecord);
+
+                // Executa a transação completa (atualização de estoque + registro de venda)
+                await batch.commit();
+
+                // 3. Exibe o resumo pós-venda gerado pelo Gemini ✨
+                await showPostSaleSummary(itemsSold, totalSaleAmount);
+
+                document.getElementById('pdv-message').textContent = `Venda de ${formatCurrency(totalSaleAmount)} finalizada com sucesso!`;
+                
+                // 4. Limpar Carrinho
+                clearCart();
+                document.getElementById('finalize-sale-button').disabled = false;
+                
+            } catch (error) {
+                console.error("Erro na transação de venda:", error);
+                document.getElementById('pdv-message').textContent = 'ERRO CRÍTICO ao finalizar a venda: ' + error.message;
+                document.getElementById('finalize-sale-button').disabled = false;
+            }
+        }
+
+        // Inicia o aplicativo ao carregar
+        window.onload = function() {
+            setupFirebase();
+            renderCart(); // Renderiza o carrinho vazio inicialmente
+            document.getElementById('barcode-input').focus(); // Foca no input de barcode
+        };
+    </script>
+</body>
+</html>
